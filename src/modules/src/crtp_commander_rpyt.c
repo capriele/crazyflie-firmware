@@ -48,6 +48,20 @@ struct CommanderCrtpLegacyValues
   uint16_t thrust;
 } __attribute__((packed));
 
+struct CommanderCrtpLegacyValuesBackstepping
+{
+    int16_t px;
+    int16_t py;
+    int16_t pz;
+    int16_t vx;
+    int16_t vy;
+    int16_t vz;
+    int16_t ax;
+    int16_t ay;
+    int16_t az;
+    uint16_t enable;
+} __attribute__((packed));
+
 /**
  * Stabilization modes for Roll, Pitch, Yaw.
  */
@@ -227,6 +241,21 @@ void crtpCommanderRpytDecodeSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
 
     setpoint->mode.yaw = modeVelocity;
   }
+}
+
+void crtpCommanderDecodeBackSteppingSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
+{
+    struct CommanderCrtpLegacyValuesBackstepping *values = (struct CommanderCrtpLegacyValuesBackstepping*)pk->data;
+    setpoint->position.x = values->px/1000.0f;
+    setpoint->position.y = values->py/1000.0f;
+    setpoint->position.z = values->pz/1000.0f;
+    setpoint->velocity.x = values->vx/1000.0f;
+    setpoint->velocity.y = values->vy/1000.0f;
+    setpoint->velocity.z = values->vz/1000.0f;
+    setpoint->acceleration.x = values->ax/1000.0f;
+    setpoint->acceleration.y = values->ay/1000.0f;
+    setpoint->acceleration.z = values->az/1000.0f;
+    setpoint->enable = values->enable;
 }
 
 // Params for flight modes
