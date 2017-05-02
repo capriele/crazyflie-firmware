@@ -14,23 +14,26 @@ OPENOCD           ?= openocd
 OPENOCD_INTERFACE ?= interface/stlink-v2.cfg
 OPENOCD_CMDS      ?=
 CROSS_COMPILE     ?= arm-none-eabi-
-PYTHON2           ?= python2
+PYTHON2           ?= python
 DFU_UTIL          ?= dfu-util
 CLOAD             ?= 1
 DEBUG             ?= 0
 CLOAD_SCRIPT      ?= python3 -m cfloader
 CLOAD_CMDS        ?=
 CLOAD_ARGS        ?=
-PLATFORM					?= CF2
+PLATFORM	   ?= CF2
 LPS_TDMA_ENABLE   ?= 0
 LPS_TDOA_ENABLE   ?= 0
 
 ######### Stabilizer configuration ##########
 ##### Sets the name of the stabilizer module to use.
-ESTIMATOR          ?= complementary
-CONTROLLER         ?= pid
-POWER_DISTRIBUTION ?= stock
-SENSORS 					 ?= cf2
+#ESTIMATOR          ?= complementary
+ESTIMATOR           ?= kalman
+#CONTROLLER         ?= pid
+CONTROLLER          ?= backstepping
+#POWER_DISTRIBUTION ?= stock
+POWER_DISTRIBUTION  ?= cf2
+SENSORS             ?= cf2
 
 ######### Test activation ##########
 FATFS_DISKIO_TESTS  ?= 0	# Set to 1 to enable FatFS diskio function tests. Erases card.
@@ -135,7 +138,7 @@ endif
 # Init
 PROJ_OBJ += main.o
 PROJ_OBJ_CF1 += platform_cf1.o
-PROJ_OBJ_CF2 += platform_cf2.o
+PROJ_OBJ_CF2 += platform_cf2.o cfmath.o physical_constants_cf2.o
 
 # Drivers
 PROJ_OBJ += exti.o nvic.o motors.o

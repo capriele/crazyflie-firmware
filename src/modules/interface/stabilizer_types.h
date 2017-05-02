@@ -111,11 +111,12 @@ typedef struct distanceMeasurement_s {
   };
   float distance;
   float stdDev;
+  uint8_t address;
 } distanceMeasurement_t;
 
 typedef struct zDistance_s {
-  uint32_t timestamp;
-  float distance;
+    uint32_t timestamp;
+    float distance;
 } zDistance_t;
 
 typedef struct sensorData_s {
@@ -136,11 +137,20 @@ typedef struct state_s {
 } state_t;
 
 typedef struct control_s {
-  int16_t roll;
-  int16_t pitch;
-  int16_t yaw;
+  bool enable;
+  int16_t roll, pitch, yaw;
+  float omega[3]; // used for the cf2 power distribution
+  float torque[3]; // used for the cf2 power distribution
+  float motorScale[4]; // populated by the cf2 motor calibration routine
   float thrust;
 } control_t;
+
+typedef struct control_float_s {
+  float m1;
+  float m2;
+  float m3;
+  float m4;
+} control_float_t;
 
 typedef enum mode_e {
   modeDisable = 0,
@@ -150,12 +160,14 @@ typedef enum mode_e {
 
 typedef struct setpoint_s {
   uint32_t timestamp;
+  uint16_t enable;
 
   attitude_t attitude;
   attitude_t attitudeRate;
   float thrust;
   point_t position;
   velocity_t velocity;
+  acc_t acceleration;
 
   struct {
     mode_t x;
@@ -202,7 +214,7 @@ typedef struct tofMeasurement_s {
 #endif
 
 #define ATTITUDE_RATE RATE_500_HZ
-#define POSITION_RATE RATE_100_HZ
+#define POSITION_RATE RATE_250_HZ
 
 #define RATE_DO_EXECUTE(RATE_HZ, TICK) ((TICK % (RATE_MAIN_LOOP / RATE_HZ)) == 0)
 

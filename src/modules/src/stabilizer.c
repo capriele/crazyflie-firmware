@@ -35,11 +35,17 @@
 #include "stabilizer.h"
 
 #include "sensors.h"
-#include "commander.h"
 #include "crtp_localization_service.h"
-#include "sitaw.h"
-#include "controller.h"
+
 #include "power_distribution.h"
+
+#ifdef CONTROLLER_TYPE_new
+  #include "controller_new.h"
+#else
+  #include "sitaw.h"
+  #include "controller.h"
+  #include "commander.h"
+#endif
 
 #ifdef ESTIMATOR_TYPE_kalman
 #include "estimator_kalman.h"
@@ -95,7 +101,7 @@ bool stabilizerTest(void)
 
 static void stabilizerTask(void* param)
 {
-  uint32_t tick;
+  uint32_t tick = 0;
   uint32_t lastWakeTime;
   vTaskSetApplicationTaskTag(0, (void*)TASK_STABILIZER_ID_NBR);
 
@@ -107,8 +113,6 @@ static void stabilizerTask(void* param)
   while(!sensorsAreCalibrated()) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
   }
-  // Initialize tick to something else then 0
-  tick = 1;
 
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(RATE_MAIN_LOOP));
@@ -123,19 +127,55 @@ static void stabilizerTask(void* param)
 
     commanderGetSetpoint(&setpoint, &state);
 
-    sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+    //PID
+    #ifdef CONTROLLER_TYPE_pid
+      sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
+      stateController(&control, &setpoint, &sensorData, &state, tick);
+    #elif CONTROLLER_TYPE_lqr
+      //stateControllerLQR(&control, &setpoint, &sensorData, &state, tick);
+    #elif CONTROLLER_TYPE_backstepping
+      stateControllerBackStepping(&control, &setpoint, &sensorData, &state, tick);
+    #elif CONTROLLER_TYPE_new
+      stateControllerRun(&control, &sensorData, &state);
+    #endif
 
-    stateController(&control, &setpoint, &sensorData, &state, tick);
+    //Controller
     powerDistribution(&control);
 
     tick++;
   }
 }
 
+
+LOG_GROUP_START(state)
+LOG_ADD(LOG_FLOAT, q0, &state.attitudeQuaternion.w)
+LOG_ADD(LOG_FLOAT, q1, &state.attitudeQuaternion.x)
+LOG_ADD(LOG_FLOAT, q2, &state.attitudeQuaternion.y)
+LOG_ADD(LOG_FLOAT, q3, &state.attitudeQuaternion.z)
+LOG_ADD(LOG_FLOAT, wx, &sensorData.gyro.x)
+LOG_ADD(LOG_FLOAT, wy, &sensorData.gyro.y)
+LOG_ADD(LOG_FLOAT, wz, &sensorData.gyro.z)
+LOG_ADD(LOG_FLOAT, px, &state.position.x)
+LOG_ADD(LOG_FLOAT, py, &state.position.y)
+LOG_ADD(LOG_FLOAT, pz, &state.position.z)
+LOG_ADD(LOG_FLOAT, vx, &state.velocity.x)
+LOG_ADD(LOG_FLOAT, vy, &state.velocity.y)
+LOG_ADD(LOG_FLOAT, vz, &state.velocity.z)
+LOG_GROUP_STOP(state)
+
 LOG_GROUP_START(ctrltarget)
 LOG_ADD(LOG_FLOAT, roll, &setpoint.attitude.roll)
 LOG_ADD(LOG_FLOAT, pitch, &setpoint.attitude.pitch)
-LOG_ADD(LOG_FLOAT, yaw, &setpoint.attitudeRate.yaw)
+LOG_ADD(LOG_FLOAT, yaw, &setpoint.attitude.yaw)
+LOG_ADD(LOG_FLOAT, px, &setpoint.position.x)
+LOG_ADD(LOG_FLOAT, py, &setpoint.position.y)
+LOG_ADD(LOG_FLOAT, pz, &setpoint.position.z)
+LOG_ADD(LOG_FLOAT, vx, &setpoint.velocity.x)
+LOG_ADD(LOG_FLOAT, vy, &setpoint.velocity.y)
+LOG_ADD(LOG_FLOAT, vz, &setpoint.velocity.z)
+LOG_ADD(LOG_FLOAT, ax, &setpoint.acceleration.x)
+LOG_ADD(LOG_FLOAT, ay, &setpoint.acceleration.y)
+LOG_ADD(LOG_FLOAT, az, &setpoint.acceleration.z)
 LOG_GROUP_STOP(ctrltarget)
 
 LOG_GROUP_START(stabilizer)
