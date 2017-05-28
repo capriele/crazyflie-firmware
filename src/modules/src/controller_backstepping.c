@@ -90,6 +90,8 @@ float alpha = 0.999f;
 float alphaw = 0.999f;
 float L1 = 10.0f;
 float L2 = 20.0f;
+float L3 = 10.0f;
+float L4 = 100.0f;
 float z1x = 0, z2x = 0, z1y = 0, z2y = 0, z1z = 0, z2z = 0, z1wx = 0, z2wx = 0, z1wy = 0, z2wy = 0, z1wz = 0, z2wz = 0;
 float dx = 0; 
 float dy = 0;
@@ -112,6 +114,24 @@ float limitError(float e){
 }
 
 void stateControllerInit(void){}
+void onlineTrajectory(const state_t *state, setpoint_t *setpoint){
+    float error = z1x - setpoint->position.x;
+    z1x = z1x - L3*dt*error + dt*z2x;
+    z2x = z2x - L4*dt*error;
+
+    error = z1y - setpoint->position.y;
+    z1y = z1y - L3*dt*error + dt*z2y;
+    z2y = z2y - L4*dt*error;
+
+    error = z1z - setpoint->position.z;
+    z1z = z1z - L3*dt*error + dt*z2z;
+    z2z = z2z - L4*dt*error;
+
+    //Update setpoint
+    setpoint->position.x = z1x;
+    setpoint->position.y = z1y;
+    setpoint->position.z = z1z;
+}
 void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
     // Euler Angles
     float x1 = state->attitudeQuaternion.w;  // q0
@@ -134,6 +154,16 @@ void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
     float x12 = state->velocity.y; // vy
     float x13 = state->velocity.z; // vz
 
+    /*
+    float L[6] = {
+        L1*CRAZYFLIE_MASS,
+        L1*CRAZYFLIE_MASS,
+        L1*CRAZYFLIE_MASS,
+        L2*CRAZYFLIE_MASS*d*d,
+        L2*CRAZYFLIE_MASS*d*d,
+        L2*CRAZYFLIE_MASS*d*d
+    };
+    */
     float L[6] = {
         L1,
         L1,
@@ -144,6 +174,14 @@ void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
     };
     float p[6] = {0};
     float k = alpha;
+    /*
+    p[0] = k*x11*x8;
+    p[1] = k*x12*x9;
+    p[2] = k*x13*x10;
+    p[3] = k*x5*x2;
+    p[4] = k*x6*x3;
+    p[5] = k*x7*x4;
+    */
     p[0] = k*CRAZYFLIE_MASS*x11;
     p[1] = k*CRAZYFLIE_MASS*x12;
     p[2] = k*CRAZYFLIE_MASS*x13;
@@ -182,6 +220,11 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
       //Reset control input
       u1 = u2 = u3 = u4 = Ux = Uy = 0;
 
+      //Reset online trajectory fix
+      z1x = state->position.x;
+      z1y = state->position.y;
+      z1z = state->position.z;
+
       //Reset disturbances
       dx = dy = dz = dwx = dwy = dwz = 0;
       D[0] = D[1] = D[2] = D[3] = D[4] = D[5] = 0;
@@ -218,8 +261,48 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     float x12 = state->velocity.y; // vy
     float x13 = state->velocity.z; // vz
 
+    //Online Trajectory Fix
+    onlineTrajectory(state, setpoint);
+
     //Disturbances estimations
     estimateDisturbances(sensors, state);
+    /*
+    //Disturbo su vx
+    float error = z1x - x11;
+    z1x = z1x - L1*dt*error + dt*z2x;
+    z2x = z2x - L2*dt*error;
+    dx = alpha*dx + (1.0f-alpha)*(z2x - 2.0f*(x2*x4+x1*x3)*u1/CRAZYFLIE_MASS)*CRAZYFLIE_MASS;
+    
+    //Disturbo su vy
+    error = z1y - x12;
+    z1y = z1y - L1*dt*error + dt*z2y;
+    z2y = z2y - L2*dt*error;
+    dy = alpha*dy + (1.0f-alpha)*(z2y - 2.0f*(x3*x4-x1*x2)*u1/CRAZYFLIE_MASS)*CRAZYFLIE_MASS;
+    
+    //Disturbo su vz
+    error = z1z - x13;
+    z1z = z1z - L1*dt*error + dt*z2z;
+    z2z = z2z - L2*dt*error;
+    dz = alpha*dz + (1.0f-alpha)*(z2z + g - (x1*x1-x2*x2-x3*x3+x4*x4)*u1/CRAZYFLIE_MASS)*CRAZYFLIE_MASS;
+    
+    //Disturbo su wx
+    error = z1wx - x5;
+    z1wx = z1wx - L1*dt*error + dt*z2wx;
+    z2wx = z2wx - L2*dt*error;
+    dwx = alphaw*dwx + (1.0f-alphaw)*(z2wx + x6*x7 - u2/(CRAZYFLIE_MASS*d*d))*CRAZYFLIE_MASS*d*d;
+    
+    //Disturbo su wy
+    error = z1wy - x6;
+    z1wy = z1wy - L1*dt*error + dt*z2wy;
+    z2wy = z2wy - L2*dt*error;
+    dwy = alphaw*dwy + (1.0f-alphaw)*(z2wy - x5*x7 - u3/(CRAZYFLIE_MASS*d*d))*CRAZYFLIE_MASS*d*d;
+    
+    //Disturbo su wz
+    error = z1wz - x7;
+    z1wz = z1wz - L1*dt*error + dt*z2wz;
+    z2wz = z2wz - L2*dt*error;
+    dwz = alphaw*dwz + (1.0f-alphaw)*(z2wz - u4/(2.0f*CRAZYFLIE_MASS*d*d))*2.0f*CRAZYFLIE_MASS*d*d;
+    */
 
     //Z-Controller
     e10 = limitError(setpoint->position.z - x10);
@@ -270,6 +353,43 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     qe[3] = qe[3]/norm;
 
     /*
+    //Desired angular velocity
+    qd[0] = 0.0f;
+    qd[1] = -x5;
+    qd[2] = -x6;
+    qd[3] = -x7;
+    norm = arm_sqrt(qd[0]*qd[0] + qd[1]*qd[1] + qd[2]*qd[2] + qd[3]*qd[3]);
+    if(norm != 0.0f){
+      qd[0] = qd[0]/norm; 
+      qd[1] = qd[1]/norm; 
+      qd[2] = qd[2]/norm; 
+      qd[3] = qd[3]/norm;
+    }
+    //Compute angular velocity quaternion error
+    we[0] = qd[0]*qe[0] - qd[1]*qe[1] - qd[2]*qe[2] - qd[3]*qe[3];
+    we[1] = qd[1]*qe[0] + qd[0]*qe[1] - qd[3]*qe[2] + qd[2]*qe[3];
+    we[2] = qd[2]*qe[0] + qd[3]*qe[1] + qd[0]*qe[2] - qd[1]*qe[3];
+    we[3] = qd[3]*qe[0] - qd[2]*qe[1] + qd[1]*qe[2] + qd[0]*qe[3];
+    */
+
+    /*
+    //Roll
+    float er1 = limitError(-Uy - state->attitude.roll);//limitError(qe[1]);
+    float er2 = limitError(x5 - we[1] - cr1 * er1);
+    u2 = CRAZYFLIE_MASS * d * d * (er1 + x6 * x7 - cr2 * er2 + cr1 * (we[1] - x5));
+
+    //Pitch
+    float ep1 = limitError(Ux - state->attitude.pitch);//limitError(qe[2]);
+    float ep2 = limitError(x6 - we[2] - cp1 * ep1);
+    u3 = CRAZYFLIE_MASS * d * d * (ep1 - x5 * x7 - cp2 * ep2 + cp1 * (we[2] - x6));
+
+    //Yaw
+    float ey1 = limitError(0 - state->attitude.yaw);//limitError(qe[3]);
+    float ey2 = limitError(x7 - we[3] - cy1 * ey1);
+    u4 = 2.0f * CRAZYFLIE_MASS * d * d * (ey1 - cy2 * ey2 + cy1 * (we[3] - x7));
+    */
+
+    /*
     Control 2 (Full Quaternion BackStepping)
     */
     float c4 = cy2;
@@ -309,11 +429,35 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     u3 = 0;
     u4 = 0;
     if(div != 0){
+        //Senza compensazione disturbi sui momenti
+        //u4 = (mult*(x4_3*x6_2 - x4_3*x5_2 + x4_3*x7_2 + 4*e4*x1_2 + 4*e4*x4_2 - 2*c4*x1_3*x7 + 4*c4*x1_2*xd4d + 4*c4*x4_2*xd4d - 2*x1_3*x5*x6 - x1_2*x4*x5_2 + x1_2*x4*x6_2 + x2_2*x4*x5_2 + x1_2*x4*x7_2 + x2_2*x4*x6_2 + x3_2*x4*x5_2 + x2_2*x4*x7_2 + x3_2*x4*x6_2 + x3_2*x4*x7_2 + 4*e2*x1*x3 - 4*e3*x1*x2 + 4*e2*x2*x4 + 4*e3*x3*x4 - 4*c44*e44*x1_2 - 4*c44*e44*x4_2 - 4*c22*e22*x1*x3 - 4*c22*e22*x2*x4 + 4*c33*e33*x1*x2 - 4*c33*e33*x3*x4 + 4*c2*x1*x3*xd2d - 4*c3*x1*x2*xd3d + 4*c2*x2*x4*xd2d + 4*c3*x3*x4*xd3d - 2*c2*x1_2*x3*x5 + 2*c3*x1_2*x2*x6 - 2*c2*x1*x3_2*x7 - 2*c3*x1*x2_2*x7 - 2*c4*x1_2*x2*x6 + 2*c4*x1_2*x3*x5 + 2*c2*x2*x4_2*x6 - 2*c3*x3*x4_2*x5 - 2*c4*x1*x4_2*x7 - 2*c4*x2*x4_2*x6 + 2*c4*x3*x4_2*x5 + 2*x1_2*x2*x5*x7 - 2*x1*x4_2*x5*x6 + 2*x2*x4_2*x5*x7 - 2*c2*x1*x2*x4*x5 + 2*c3*x1*x2*x4*x5 + 2*c2*x1*x3*x4*x6 - 2*c3*x1*x3*x4*x6 - 2*c2*x2*x3*x4*x7 + 2*c3*x2*x3*x4*x7))/div;
+        //u3 = (mult*(x3_3*x5_2 + x3_3*x6_2 + x3_3*x7_2 + 4*e3*x1_2 + 4*e3*x3_2 - 2*c3*x1_3*x6 + 4*c3*x1_2*xd3d + 4*c3*x3_2*xd3d - 2*x1_3*x5*x7 + x1_2*x3*x5_2 + x1_2*x3*x6_2 + x2_2*x3*x5_2 + x1_2*x3*x7_2 + x2_2*x3*x6_2 - x3*x4_2*x5_2 + x2_2*x3*x7_2 + x3*x4_2*x6_2 + x3*x4_2*x7_2 - 4*e2*x1*x4 + 4*e2*x2*x3 + 4*e4*x1*x2 + 4*e4*x3*x4 - 4*c33*e33*x1_2 - 4*c33*e33*x3_2 + 4*c22*e22*x1*x4 - 4*c22*e22*x2*x3 - 4*c44*e44*x1*x2 - 4*c44*e44*x3*x4 - 4*c2*x1*x4*xd2d + 4*c2*x2*x3*xd2d + 4*c4*x1*x2*xd4d + 4*c4*x3*x4*xd4d + 2*c2*x1_2*x4*x5 - 2*c2*x1*x4_2*x6 - 2*c3*x1*x3_2*x6 + 2*c3*x1_2*x2*x7 - 2*c3*x1_2*x4*x5 - 2*c4*x1*x2_2*x6 - 2*c2*x2*x3_2*x7 - 2*c4*x1_2*x2*x7 + 2*c3*x2*x3_2*x7 - 2*c3*x3_2*x4*x5 + 2*c4*x3_2*x4*x5 - 2*x1*x2*x4*x5_2 - 2*x1_2*x2*x5*x6 - 2*x1*x3_2*x5*x7 - 2*x1*x4_2*x5*x7 - 2*c2*x1*x2*x3*x5 + 2*c4*x1*x2*x3*x5 + 2*c2*x1*x3*x4*x7 + 2*c2*x2*x3*x4*x6 - 2*c4*x1*x3*x4*x7 - 2*c4*x2*x3*x4*x6 - 2*x1*x3*x4*x5*x6 + 2*x2*x3*x4*x5*x7))/(2*div);
+        //u2 = (mult*(x2_3*x5_2 + x2_3*x6_2 + x2_3*x7_2 + 4*e2*x1_2 + 4*e2*x2_2 - 2*c2*x1_3*x5 + 4*c2*x1_2*xd2d + 4*c2*x2_2*xd2d + 2*x1_3*x6*x7 + x1_2*x2*x5_2 + x1_2*x2*x6_2 + x2*x3_2*x5_2 + x1_2*x2*x7_2 + x2*x3_2*x6_2 - x2*x4_2*x5_2 + x2*x3_2*x7_2 + x2*x4_2*x6_2 + x2*x4_2*x7_2 + 4*e3*x1*x4 + 4*e3*x2*x3 - 4*e4*x1*x3 + 4*e4*x2*x4 - 4*c22*e22*x1_2 - 4*c22*e22*x2_2 - 4*c33*e33*x1*x4 - 4*c33*e33*x2*x3 + 4*c44*e44*x1*x3 - 4*c44*e44*x2*x4 + 4*c3*x1*x4*xd3d + 4*c3*x2*x3*xd3d - 4*c4*x1*x3*xd4d + 4*c4*x2*x4*xd4d - 2*c2*x1*x2_2*x5 - 2*c2*x1_2*x3*x7 + 2*c2*x1_2*x4*x6 - 2*c3*x1*x4_2*x5 - 2*c4*x1*x3_2*x5 - 2*c2*x2_2*x3*x7 + 2*c2*x2_2*x4*x6 - 2*c3*x1_2*x4*x6 + 2*c3*x2_2*x3*x7 + 2*c4*x1_2*x3*x7 - 2*c4*x2_2*x4*x6 + 2*x1*x3*x4*x5_2 + 2*x1_2*x3*x5*x6 + 2*x1*x2_2*x6*x7 + 2*x1*x3_2*x6*x7 + 2*x1*x4_2*x6*x7 + 2*x2_2*x4*x5*x7 - 2*c3*x1*x2*x3*x6 + 2*c4*x1*x2*x3*x6 + 2*c3*x1*x2*x4*x7 - 2*c3*x2*x3*x4*x5 - 2*c4*x1*x2*x4*x7 + 2*c4*x2*x3*x4*x5 - 2*x1*x2*x3*x5*x7 - 2*x1*x2*x4*x5*x6))/(2*div);
+        
         //Compensazione disturbi
         u4 = (d_2*m*x4_3*x6_2 - dwz*x1*x2_2 - dwz*x1*x3_2 - dwz*x1*x4_2 - d_2*m*x4_3*x5_2 - dwz*x1_3 + d_2*m*x4_3*x7_2 + 4*d_2*e4*m*x1_2 + 4*d_2*e4*m*x4_2 - 4*c44*d_2*e44*m*x1_2 - 4*c44*d_2*e44*m*x4_2 - 2*c4*d_2*m*x1_3*x7 + 4*c4*d_2*m*x1_2*xd4d + 4*c4*d_2*m*x4_2*xd4d - 2*d_2*m*x1_3*x5*x6 - d_2*m*x1_2*x4*x5_2 + d_2*m*x1_2*x4*x6_2 + d_2*m*x2_2*x4*x5_2 + d_2*m*x1_2*x4*x7_2 + d_2*m*x2_2*x4*x6_2 + d_2*m*x3_2*x4*x5_2 + d_2*m*x2_2*x4*x7_2 + d_2*m*x3_2*x4*x6_2 + d_2*m*x3_2*x4*x7_2 + 4*d_2*e2*m*x1*x3 - 4*d_2*e3*m*x1*x2 + 4*d_2*e2*m*x2*x4 + 4*d_2*e3*m*x3*x4 - 4*c22*d_2*e22*m*x1*x3 - 4*c22*d_2*e22*m*x2*x4 + 4*c33*d_2*e33*m*x1*x2 - 4*c33*d_2*e33*m*x3*x4 + 4*c2*d_2*m*x1*x3*xd2d - 4*c3*d_2*m*x1*x2*xd3d + 4*c2*d_2*m*x2*x4*xd2d + 4*c3*d_2*m*x3*x4*xd3d - 2*c2*d_2*m*x1_2*x3*x5 + 2*c3*d_2*m*x1_2*x2*x6 - 2*c2*d_2*m*x1*x3_2*x7 - 2*c3*d_2*m*x1*x2_2*x7 - 2*c4*d_2*m*x1_2*x2*x6 + 2*c4*d_2*m*x1_2*x3*x5 + 2*c2*d_2*m*x2*x4_2*x6 - 2*c3*d_2*m*x3*x4_2*x5 - 2*c4*d_2*m*x1*x4_2*x7 - 2*c4*d_2*m*x2*x4_2*x6 + 2*c4*d_2*m*x3*x4_2*x5 + 2*d_2*m*x1_2*x2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x6 + 2*d_2*m*x2*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x4*x5 + 2*c3*d_2*m*x1*x2*x4*x5 + 2*c2*d_2*m*x1*x3*x4*x6 - 2*c3*d_2*m*x1*x3*x4*x6 - 2*c2*d_2*m*x2*x3*x4*x7 + 2*c3*d_2*m*x2*x3*x4*x7)/div;
         u3 = (d_2*m*x3_3*x5_2 - 2*dwy*x1*x2_2 - 2*dwy*x1*x3_2 - 2*dwy*x1*x4_2 - 2*dwy*x1_3 + d_2*m*x3_3*x6_2 + d_2*m*x3_3*x7_2 + 4*d_2*e3*m*x1_2 + 4*d_2*e3*m*x3_2 - 4*c33*d_2*e33*m*x1_2 - 4*c33*d_2*e33*m*x3_2 - 2*c3*d_2*m*x1_3*x6 + 4*c3*d_2*m*x1_2*xd3d + 4*c3*d_2*m*x3_2*xd3d - 2*d_2*m*x1_3*x5*x7 + d_2*m*x1_2*x3*x5_2 + d_2*m*x1_2*x3*x6_2 + d_2*m*x2_2*x3*x5_2 + d_2*m*x1_2*x3*x7_2 + d_2*m*x2_2*x3*x6_2 - d_2*m*x3*x4_2*x5_2 + d_2*m*x2_2*x3*x7_2 + d_2*m*x3*x4_2*x6_2 + d_2*m*x3*x4_2*x7_2 - 4*d_2*e2*m*x1*x4 + 4*d_2*e2*m*x2*x3 + 4*d_2*e4*m*x1*x2 + 4*d_2*e4*m*x3*x4 + 4*c22*d_2*e22*m*x1*x4 - 4*c22*d_2*e22*m*x2*x3 - 4*c44*d_2*e44*m*x1*x2 - 4*c44*d_2*e44*m*x3*x4 - 4*c2*d_2*m*x1*x4*xd2d + 4*c2*d_2*m*x2*x3*xd2d + 4*c4*d_2*m*x1*x2*xd4d + 4*c4*d_2*m*x3*x4*xd4d + 2*c2*d_2*m*x1_2*x4*x5 - 2*c2*d_2*m*x1*x4_2*x6 - 2*c3*d_2*m*x1*x3_2*x6 + 2*c3*d_2*m*x1_2*x2*x7 - 2*c3*d_2*m*x1_2*x4*x5 - 2*c4*d_2*m*x1*x2_2*x6 - 2*c2*d_2*m*x2*x3_2*x7 - 2*c4*d_2*m*x1_2*x2*x7 + 2*c3*d_2*m*x2*x3_2*x7 - 2*c3*d_2*m*x3_2*x4*x5 + 2*c4*d_2*m*x3_2*x4*x5 - 2*d_2*m*x1*x2*x4*x5_2 - 2*d_2*m*x1_2*x2*x5*x6 - 2*d_2*m*x1*x3_2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x3*x5 + 2*c4*d_2*m*x1*x2*x3*x5 + 2*c2*d_2*m*x1*x3*x4*x7 + 2*c2*d_2*m*x2*x3*x4*x6 - 2*c4*d_2*m*x1*x3*x4*x7 - 2*c4*d_2*m*x2*x3*x4*x6 - 2*d_2*m*x1*x3*x4*x5*x6 + 2*d_2*m*x2*x3*x4*x5*x7)/(2*div);
         u2 = (d_2*m*x2_3*x5_2 - 2*dwx*x1*x2_2 - 2*dwx*x1*x3_2 - 2*dwx*x1*x4_2 - 2*dwx*x1_3 + d_2*m*x2_3*x6_2 + d_2*m*x2_3*x7_2 + 4*d_2*e2*m*x1_2 + 4*d_2*e2*m*x2_2 - 4*c22*d_2*e22*m*x1_2 - 4*c22*d_2*e22*m*x2_2 - 2*c2*d_2*m*x1_3*x5 + 4*c2*d_2*m*x1_2*xd2d + 4*c2*d_2*m*x2_2*xd2d + 2*d_2*m*x1_3*x6*x7 + d_2*m*x1_2*x2*x5_2 + d_2*m*x1_2*x2*x6_2 + d_2*m*x2*x3_2*x5_2 + d_2*m*x1_2*x2*x7_2 + d_2*m*x2*x3_2*x6_2 - d_2*m*x2*x4_2*x5_2 + d_2*m*x2*x3_2*x7_2 + d_2*m*x2*x4_2*x6_2 + d_2*m*x2*x4_2*x7_2 + 4*d_2*e3*m*x1*x4 + 4*d_2*e3*m*x2*x3 - 4*d_2*e4*m*x1*x3 + 4*d_2*e4*m*x2*x4 - 4*c33*d_2*e33*m*x1*x4 - 4*c33*d_2*e33*m*x2*x3 + 4*c44*d_2*e44*m*x1*x3 - 4*c44*d_2*e44*m*x2*x4 + 4*c3*d_2*m*x1*x4*xd3d + 4*c3*d_2*m*x2*x3*xd3d - 4*c4*d_2*m*x1*x3*xd4d + 4*c4*d_2*m*x2*x4*xd4d - 2*c2*d_2*m*x1*x2_2*x5 - 2*c2*d_2*m*x1_2*x3*x7 + 2*c2*d_2*m*x1_2*x4*x6 - 2*c3*d_2*m*x1*x4_2*x5 - 2*c4*d_2*m*x1*x3_2*x5 - 2*c2*d_2*m*x2_2*x3*x7 + 2*c2*d_2*m*x2_2*x4*x6 - 2*c3*d_2*m*x1_2*x4*x6 + 2*c3*d_2*m*x2_2*x3*x7 + 2*c4*d_2*m*x1_2*x3*x7 - 2*c4*d_2*m*x2_2*x4*x6 + 2*d_2*m*x1*x3*x4*x5_2 + 2*d_2*m*x1_2*x3*x5*x6 + 2*d_2*m*x1*x2_2*x6*x7 + 2*d_2*m*x1*x3_2*x6*x7 + 2*d_2*m*x1*x4_2*x6*x7 + 2*d_2*m*x2_2*x4*x5*x7 - 2*c3*d_2*m*x1*x2*x3*x6 + 2*c4*d_2*m*x1*x2*x3*x6 + 2*c3*d_2*m*x1*x2*x4*x7 - 2*c3*d_2*m*x2*x3*x4*x5 - 2*c4*d_2*m*x1*x2*x4*x7 + 2*c4*d_2*m*x2*x3*x4*x5 - 2*d_2*m*x1*x2*x3*x5*x7 - 2*d_2*m*x1*x2*x4*x5*x6)/(2*div);
     }
+
+    //Compute the forces
+    /*
+    float f1, f2, f3, f4;
+    f1 = (u1 - u2/d + u3/d + u4/c)/4.0f;
+    f2 = (u1 - u2/d - u3/d - u4/c)/4.0f;
+    f3 = (u1 + u2/d - u3/d + u4/c)/4.0f;
+    f4 = (u1 + u2/d + u3/d - u4/c)/4.0f;
+    if(f1 < 0) f1 = 0;
+    if(f2 < 0) f2 = 0;
+    if(f3 < 0) f3 = 0;
+    if(f4 < 0) f4 = 0;
+
+    //Compute saturated inputs
+    u1 = f1 + f2 + f3 + f4;
+    u2 = -d*f1 - d*f2 + d*f3 + d*f4;
+    u3 = d*f1 - d*f2 - d*f3 + d*f4;
+    u4 = c*f1 - c*f2 + c*f3 - c*f4;
+    */
 
     //Send Control commands 
     control->thrust = u1/CRAZYFLIE_MASS;
@@ -343,7 +487,7 @@ LOG_ADD(LOG_FLOAT, dwx, &dwx)
 LOG_ADD(LOG_FLOAT, dwy, &dwy)
 LOG_ADD(LOG_FLOAT, dwz, &dwz)
 
-LOG_GROUP_STOP(state)
+LOG_GROUP_STOP(Bks)
 
 PARAM_GROUP_START(posCtlBks)
 
@@ -351,6 +495,8 @@ PARAM_ADD(PARAM_FLOAT, alpha, &alpha)
 PARAM_ADD(PARAM_FLOAT, alphaw, &alphaw)
 PARAM_ADD(PARAM_FLOAT, L1, &L1)
 PARAM_ADD(PARAM_FLOAT, L2, &L2)
+PARAM_ADD(PARAM_FLOAT, L3, &L3)
+PARAM_ADD(PARAM_FLOAT, L4, &L4)
 
 PARAM_ADD(PARAM_FLOAT, kx1, &c8)
 PARAM_ADD(PARAM_FLOAT, kx2, &c11)
@@ -370,6 +516,13 @@ PARAM_ADD(PARAM_FLOAT, kp2, &cp2)
 PARAM_ADD(PARAM_FLOAT, kw1, &cy1)
 PARAM_ADD(PARAM_FLOAT, kw2, &cy1)
 
+//PARAM_ADD(PARAM_UINT16, thrustBase, &this.thrustBase)
+//PARAM_ADD(PARAM_UINT16, thrustMin, &this.thrustMin)
+
+//PARAM_ADD(PARAM_FLOAT, rpLimit,  &rpLimit)
 PARAM_ADD(PARAM_FLOAT, errorLimit,  &errorLimit)
+//PARAM_ADD(PARAM_FLOAT, motorInputFilter,  &motorInputFilter)
+//PARAM_ADD(PARAM_FLOAT, xyVelMax, &xyVelMax)
+//PARAM_ADD(PARAM_FLOAT, zVelMax,  &zVelMax)
 
 PARAM_GROUP_STOP(posCtlBks)
