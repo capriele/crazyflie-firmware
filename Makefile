@@ -1,3 +1,4 @@
+# make clean && make PLATFORM=CF2 CLOAD=1 && make cload
 # CrazyFlie's Makefile
 # Copyright (c) 2011,2012 Bitcraze AB
 # This Makefile compiles all the objet file to ./bin/ and the resulting firmware
@@ -21,7 +22,7 @@ DEBUG             ?= 0
 CLOAD_SCRIPT      ?= python3 -m cfloader
 CLOAD_CMDS        ?=
 CLOAD_ARGS        ?=
-PLATFORM	   ?= CF2
+PLATFORM	      ?= CF2
 LPS_TDMA_ENABLE   ?= 0
 LPS_TDOA_ENABLE   ?= 0
 
