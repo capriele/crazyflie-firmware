@@ -60,6 +60,7 @@ struct CommanderCrtpLegacyValuesBackstepping
     int16_t ay;
     int16_t az;
     uint16_t enable;
+    uint16_t mode;
 } __attribute__((packed));
 
 /**
@@ -256,6 +257,7 @@ void crtpCommanderDecodeBackSteppingSetpoint(setpoint_t *setpoint, CRTPPacket *p
     setpoint->acceleration.y = values->ay/1000.0f;
     setpoint->acceleration.z = values->az/1000.0f;
     setpoint->enable = values->enable;
+    setpoint->flight_mode = values->mode;
 }
 
 // Params for flight modes

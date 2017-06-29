@@ -33,6 +33,7 @@
 #include "num.h"
 #include "cfmath.h"
 #include "physical_constants.h"
+#include "estimator_kalman.h"
 
 // Maximum roll/pitch angle permited
 //static float rpLimit  = 20;
@@ -210,6 +211,10 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
 {
   control->enable = setpoint->enable;
   if (RATE_DO_EXECUTE(POSITION_RATE, tick)) {
+
+    //Abilito lo Z-Ranger nel filtro di kalman
+    stateEstimatorEnableZRanger(setpoint->flight_mode >= 1);
+
     if (!control->enable)
     {
       control->thrust = 0;
@@ -303,6 +308,13 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     z2wz = z2wz - L2*dt*error;
     dwz = alphaw*dwz + (1.0f-alphaw)*(z2wz - u4/(2.0f*CRAZYFLIE_MASS*d*d))*2.0f*CRAZYFLIE_MASS*d*d;
     */
+
+    //Landing
+    if(setpoint->flight_mode == 1){
+        if(setpoint->position.z > x10){
+            setpoint->position.z = x10;
+        }
+    }
 
     //Z-Controller
     e10 = limitError(setpoint->position.z - x10);

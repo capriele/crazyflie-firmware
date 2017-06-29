@@ -143,12 +143,17 @@ static inline bool stateEstimatorHasTDOAPacket(tdoaMeasurement_t *uwb) {
 
 // Measurements of TOF from laser sensor
 static xQueueHandle tofDataQueue;
+bool kalman_enable_z_ranger = false;
 #define TOF_QUEUE_LENGTH (10)
 
 static void stateEstimatorUpdateWithTof(tofMeasurement_t *tof);
 
 static inline bool stateEstimatorHasTOFPacket(tofMeasurement_t *tof) {
   return (pdTRUE == xQueueReceive(tofDataQueue, tof, 0));
+}
+
+void stateEstimatorEnableZRanger(bool enable){
+  kalman_enable_z_ranger = enable;
 }
 
 /**
@@ -455,7 +460,8 @@ void stateEstimatorUpdate(state_t *state, sensorData_t *sensors, control_t *cont
   tofMeasurement_t tof;
   while (stateEstimatorHasTOFPacket(&tof))
   {
-    stateEstimatorUpdateWithTof(&tof);
+    if(kalman_enable_z_ranger)
+      stateEstimatorUpdateWithTof(&tof);
     doneUpdate = true;
   }
 

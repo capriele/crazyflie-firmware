@@ -161,6 +161,7 @@ typedef enum mode_e {
 typedef struct setpoint_s {
   uint32_t timestamp;
   uint16_t enable;
+  uint16_t flight_mode;
 
   attitude_t attitude;
   attitude_t attitudeRate;
