@@ -100,7 +100,8 @@ float dz = 0;
 float dwx = 0; 
 float dwy = 0;
 float dwz = 0; 
-#define dt 1.0f/POSITION_RATE
+#define BACKSTEPPING_RATE RATE_500_HZ
+#define dt 1.0f/BACKSTEPPING_RATE
 
 //Aggiungo stima del disturbo
 static float D[6] = {0};
@@ -134,6 +135,9 @@ void onlineTrajectory(const state_t *state, setpoint_t *setpoint){
     setpoint->position.z = z1z;
 }
 void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
+
+    float dt1 = 0.001f;
+
     // Euler Angles
     float x1 = state->attitudeQuaternion.w;  // q0
     float x2 = state->attitudeQuaternion.x;  // q1
@@ -190,12 +194,12 @@ void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
     p[4] = k*CRAZYFLIE_MASS*d*d*(0.5f*(x4*x5+x1*x6-x2*x7));
     p[5] = k*2.0f*CRAZYFLIE_MASS*d*d*(0.5f*(-x3*x5+x2*x6+x1*x7));
 
-    D[0] = D[0] + dt*(-L[0]*D[0] + L[0]*(-2.0f*(x2*x4+x1*x3)*u1 - p[0]));
-    D[1] = D[1] + dt*(-L[1]*D[1] + L[1]*(-2.0f*(x3*x4-x1*x2)*u1 - p[1]));
-    D[2] = D[2] + dt*(-L[2]*D[2] + L[2]*(CRAZYFLIE_MASS*g - (x1*x1-x2*x2-x3*x3+x4*x4)*u1 - p[2]));
-    D[3] = D[3] + dt*(-L[3]*D[3] + L[3]*(x6*x7*CRAZYFLIE_MASS*d*d - u2 - p[3]));
-    D[4] = D[4] + dt*(-L[4]*D[4] + L[4]*(-x5*x7*CRAZYFLIE_MASS*d*d - u3 - p[4]));
-    D[5] = D[5] + dt*(-L[5]*D[5] + L[5]*(-u4 - p[5]));
+    D[0] = D[0] + dt1*(-L[0]*D[0] + L[0]*(-2.0f*(x2*x4+x1*x3)*u1 - p[0]));
+    D[1] = D[1] + dt1*(-L[1]*D[1] + L[1]*(-2.0f*(x3*x4-x1*x2)*u1 - p[1]));
+    D[2] = D[2] + dt1*(-L[2]*D[2] + L[2]*(CRAZYFLIE_MASS*g - (x1*x1-x2*x2-x3*x3+x4*x4)*u1 - p[2]));
+    D[3] = D[3] + dt1*(-L[3]*D[3] + L[3]*(x6*x7*CRAZYFLIE_MASS*d*d - u2 - p[3]));
+    D[4] = D[4] + dt1*(-L[4]*D[4] + L[4]*(-x5*x7*CRAZYFLIE_MASS*d*d - u3 - p[4]));
+    D[5] = D[5] + dt1*(-L[5]*D[5] + L[5]*(-u4 - p[5]));
 
     //Calcolo il disturbo
     dx = D[0] + p[0]; 
@@ -204,13 +208,17 @@ void estimateDisturbances(const sensorData_t *sensors, const state_t *state){
     dwx = D[3] + p[3]; 
     dwy = D[4] + p[4]; 
     dwz = D[5] + p[5]; 
-
 }
 bool stateControllerTest(void){return true;}
 void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const sensorData_t *sensors, const state_t *state, const uint32_t tick)
 {
   control->enable = setpoint->enable;
-  if (RATE_DO_EXECUTE(POSITION_RATE, tick)) {
+
+  //Disturbances estimations
+  if(control->enable)
+    estimateDisturbances(sensors, state);
+
+  if (RATE_DO_EXECUTE(BACKSTEPPING_RATE, tick)) {
 
     //Abilito lo Z-Ranger nel filtro di kalman
     stateEstimatorEnableZRanger(setpoint->flight_mode >= 1);
@@ -269,8 +277,6 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     //Online Trajectory Fix
     onlineTrajectory(state, setpoint);
 
-    //Disturbances estimations
-    estimateDisturbances(sensors, state);
     /*
     //Disturbo su vx
     float error = z1x - x11;
@@ -319,7 +325,7 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
     //Z-Controller
     e10 = limitError(setpoint->position.z - x10);
     float e13 = limitError(x13 - setpoint->velocity.z - c10 * e10);
-    u1 += dt * CRAZYFLIE_MASS * (g + e10 + setpoint->acceleration.z - dz / CRAZYFLIE_MASS - c13 * e13 + c10 * (setpoint->velocity.z - x13)) / (x1*x1 - x2*x2 - x3*x3 + x4*x4);
+    u1 = CRAZYFLIE_MASS * (g + e10 + setpoint->acceleration.z - dz / CRAZYFLIE_MASS - c13 * e13 + c10 * (setpoint->velocity.z - x13)) / (x1*x1 - x2*x2 - x3*x3 + x4*x4);
 
     //X-Y Controllers
     Ux = 0;
@@ -328,12 +334,12 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
       // X
       e8 = limitError(setpoint->position.x - x8);
       float e11 = limitError(x11 - setpoint->velocity.x - c8 * e8);
-      Ux += dt * CRAZYFLIE_MASS * (e8 + setpoint->acceleration.x - dx / CRAZYFLIE_MASS - c11 * e11 + c8 * (setpoint->velocity.x - x11)) / (2.0f*u1);
+      Ux = CRAZYFLIE_MASS * (e8 + setpoint->acceleration.x - dx / CRAZYFLIE_MASS - c11 * e11 + c8 * (setpoint->velocity.x - x11)) / (2.0f*u1);
 
       // Y
       e9 = limitError(setpoint->position.y - x9);
       float e12 = limitError(x12 - setpoint->velocity.y - c9 * e9);
-      Uy += dt * CRAZYFLIE_MASS * (e9 + setpoint->acceleration.y - dy / CRAZYFLIE_MASS - c12 * e12 + c9 * (setpoint->velocity.y - x12)) / (2.0f*u1);
+      Uy = CRAZYFLIE_MASS * (e9 + setpoint->acceleration.y - dy / CRAZYFLIE_MASS - c12 * e12 + c9 * (setpoint->velocity.y - x12)) / (2.0f*u1);
     }
 
     //Desired attitude quaternion
@@ -447,9 +453,9 @@ void stateControllerBackStepping(control_t *control, setpoint_t *setpoint, const
         //u2 = (mult*(x2_3*x5_2 + x2_3*x6_2 + x2_3*x7_2 + 4*e2*x1_2 + 4*e2*x2_2 - 2*c2*x1_3*x5 + 4*c2*x1_2*xd2d + 4*c2*x2_2*xd2d + 2*x1_3*x6*x7 + x1_2*x2*x5_2 + x1_2*x2*x6_2 + x2*x3_2*x5_2 + x1_2*x2*x7_2 + x2*x3_2*x6_2 - x2*x4_2*x5_2 + x2*x3_2*x7_2 + x2*x4_2*x6_2 + x2*x4_2*x7_2 + 4*e3*x1*x4 + 4*e3*x2*x3 - 4*e4*x1*x3 + 4*e4*x2*x4 - 4*c22*e22*x1_2 - 4*c22*e22*x2_2 - 4*c33*e33*x1*x4 - 4*c33*e33*x2*x3 + 4*c44*e44*x1*x3 - 4*c44*e44*x2*x4 + 4*c3*x1*x4*xd3d + 4*c3*x2*x3*xd3d - 4*c4*x1*x3*xd4d + 4*c4*x2*x4*xd4d - 2*c2*x1*x2_2*x5 - 2*c2*x1_2*x3*x7 + 2*c2*x1_2*x4*x6 - 2*c3*x1*x4_2*x5 - 2*c4*x1*x3_2*x5 - 2*c2*x2_2*x3*x7 + 2*c2*x2_2*x4*x6 - 2*c3*x1_2*x4*x6 + 2*c3*x2_2*x3*x7 + 2*c4*x1_2*x3*x7 - 2*c4*x2_2*x4*x6 + 2*x1*x3*x4*x5_2 + 2*x1_2*x3*x5*x6 + 2*x1*x2_2*x6*x7 + 2*x1*x3_2*x6*x7 + 2*x1*x4_2*x6*x7 + 2*x2_2*x4*x5*x7 - 2*c3*x1*x2*x3*x6 + 2*c4*x1*x2*x3*x6 + 2*c3*x1*x2*x4*x7 - 2*c3*x2*x3*x4*x5 - 2*c4*x1*x2*x4*x7 + 2*c4*x2*x3*x4*x5 - 2*x1*x2*x3*x5*x7 - 2*x1*x2*x4*x5*x6))/(2*div);
         
         //Compensazione disturbi
-        u4 += dt * (d_2*m*x4_3*x6_2 - dwz*x1*x2_2 - dwz*x1*x3_2 - dwz*x1*x4_2 - d_2*m*x4_3*x5_2 - dwz*x1_3 + d_2*m*x4_3*x7_2 + 4*d_2*e4*m*x1_2 + 4*d_2*e4*m*x4_2 - 4*c44*d_2*e44*m*x1_2 - 4*c44*d_2*e44*m*x4_2 - 2*c4*d_2*m*x1_3*x7 + 4*c4*d_2*m*x1_2*xd4d + 4*c4*d_2*m*x4_2*xd4d - 2*d_2*m*x1_3*x5*x6 - d_2*m*x1_2*x4*x5_2 + d_2*m*x1_2*x4*x6_2 + d_2*m*x2_2*x4*x5_2 + d_2*m*x1_2*x4*x7_2 + d_2*m*x2_2*x4*x6_2 + d_2*m*x3_2*x4*x5_2 + d_2*m*x2_2*x4*x7_2 + d_2*m*x3_2*x4*x6_2 + d_2*m*x3_2*x4*x7_2 + 4*d_2*e2*m*x1*x3 - 4*d_2*e3*m*x1*x2 + 4*d_2*e2*m*x2*x4 + 4*d_2*e3*m*x3*x4 - 4*c22*d_2*e22*m*x1*x3 - 4*c22*d_2*e22*m*x2*x4 + 4*c33*d_2*e33*m*x1*x2 - 4*c33*d_2*e33*m*x3*x4 + 4*c2*d_2*m*x1*x3*xd2d - 4*c3*d_2*m*x1*x2*xd3d + 4*c2*d_2*m*x2*x4*xd2d + 4*c3*d_2*m*x3*x4*xd3d - 2*c2*d_2*m*x1_2*x3*x5 + 2*c3*d_2*m*x1_2*x2*x6 - 2*c2*d_2*m*x1*x3_2*x7 - 2*c3*d_2*m*x1*x2_2*x7 - 2*c4*d_2*m*x1_2*x2*x6 + 2*c4*d_2*m*x1_2*x3*x5 + 2*c2*d_2*m*x2*x4_2*x6 - 2*c3*d_2*m*x3*x4_2*x5 - 2*c4*d_2*m*x1*x4_2*x7 - 2*c4*d_2*m*x2*x4_2*x6 + 2*c4*d_2*m*x3*x4_2*x5 + 2*d_2*m*x1_2*x2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x6 + 2*d_2*m*x2*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x4*x5 + 2*c3*d_2*m*x1*x2*x4*x5 + 2*c2*d_2*m*x1*x3*x4*x6 - 2*c3*d_2*m*x1*x3*x4*x6 - 2*c2*d_2*m*x2*x3*x4*x7 + 2*c3*d_2*m*x2*x3*x4*x7)/div;
-        u3 += dt * (d_2*m*x3_3*x5_2 - 2*dwy*x1*x2_2 - 2*dwy*x1*x3_2 - 2*dwy*x1*x4_2 - 2*dwy*x1_3 + d_2*m*x3_3*x6_2 + d_2*m*x3_3*x7_2 + 4*d_2*e3*m*x1_2 + 4*d_2*e3*m*x3_2 - 4*c33*d_2*e33*m*x1_2 - 4*c33*d_2*e33*m*x3_2 - 2*c3*d_2*m*x1_3*x6 + 4*c3*d_2*m*x1_2*xd3d + 4*c3*d_2*m*x3_2*xd3d - 2*d_2*m*x1_3*x5*x7 + d_2*m*x1_2*x3*x5_2 + d_2*m*x1_2*x3*x6_2 + d_2*m*x2_2*x3*x5_2 + d_2*m*x1_2*x3*x7_2 + d_2*m*x2_2*x3*x6_2 - d_2*m*x3*x4_2*x5_2 + d_2*m*x2_2*x3*x7_2 + d_2*m*x3*x4_2*x6_2 + d_2*m*x3*x4_2*x7_2 - 4*d_2*e2*m*x1*x4 + 4*d_2*e2*m*x2*x3 + 4*d_2*e4*m*x1*x2 + 4*d_2*e4*m*x3*x4 + 4*c22*d_2*e22*m*x1*x4 - 4*c22*d_2*e22*m*x2*x3 - 4*c44*d_2*e44*m*x1*x2 - 4*c44*d_2*e44*m*x3*x4 - 4*c2*d_2*m*x1*x4*xd2d + 4*c2*d_2*m*x2*x3*xd2d + 4*c4*d_2*m*x1*x2*xd4d + 4*c4*d_2*m*x3*x4*xd4d + 2*c2*d_2*m*x1_2*x4*x5 - 2*c2*d_2*m*x1*x4_2*x6 - 2*c3*d_2*m*x1*x3_2*x6 + 2*c3*d_2*m*x1_2*x2*x7 - 2*c3*d_2*m*x1_2*x4*x5 - 2*c4*d_2*m*x1*x2_2*x6 - 2*c2*d_2*m*x2*x3_2*x7 - 2*c4*d_2*m*x1_2*x2*x7 + 2*c3*d_2*m*x2*x3_2*x7 - 2*c3*d_2*m*x3_2*x4*x5 + 2*c4*d_2*m*x3_2*x4*x5 - 2*d_2*m*x1*x2*x4*x5_2 - 2*d_2*m*x1_2*x2*x5*x6 - 2*d_2*m*x1*x3_2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x3*x5 + 2*c4*d_2*m*x1*x2*x3*x5 + 2*c2*d_2*m*x1*x3*x4*x7 + 2*c2*d_2*m*x2*x3*x4*x6 - 2*c4*d_2*m*x1*x3*x4*x7 - 2*c4*d_2*m*x2*x3*x4*x6 - 2*d_2*m*x1*x3*x4*x5*x6 + 2*d_2*m*x2*x3*x4*x5*x7)/(2.0f*div);
-        u2 += dt * (d_2*m*x2_3*x5_2 - 2*dwx*x1*x2_2 - 2*dwx*x1*x3_2 - 2*dwx*x1*x4_2 - 2*dwx*x1_3 + d_2*m*x2_3*x6_2 + d_2*m*x2_3*x7_2 + 4*d_2*e2*m*x1_2 + 4*d_2*e2*m*x2_2 - 4*c22*d_2*e22*m*x1_2 - 4*c22*d_2*e22*m*x2_2 - 2*c2*d_2*m*x1_3*x5 + 4*c2*d_2*m*x1_2*xd2d + 4*c2*d_2*m*x2_2*xd2d + 2*d_2*m*x1_3*x6*x7 + d_2*m*x1_2*x2*x5_2 + d_2*m*x1_2*x2*x6_2 + d_2*m*x2*x3_2*x5_2 + d_2*m*x1_2*x2*x7_2 + d_2*m*x2*x3_2*x6_2 - d_2*m*x2*x4_2*x5_2 + d_2*m*x2*x3_2*x7_2 + d_2*m*x2*x4_2*x6_2 + d_2*m*x2*x4_2*x7_2 + 4*d_2*e3*m*x1*x4 + 4*d_2*e3*m*x2*x3 - 4*d_2*e4*m*x1*x3 + 4*d_2*e4*m*x2*x4 - 4*c33*d_2*e33*m*x1*x4 - 4*c33*d_2*e33*m*x2*x3 + 4*c44*d_2*e44*m*x1*x3 - 4*c44*d_2*e44*m*x2*x4 + 4*c3*d_2*m*x1*x4*xd3d + 4*c3*d_2*m*x2*x3*xd3d - 4*c4*d_2*m*x1*x3*xd4d + 4*c4*d_2*m*x2*x4*xd4d - 2*c2*d_2*m*x1*x2_2*x5 - 2*c2*d_2*m*x1_2*x3*x7 + 2*c2*d_2*m*x1_2*x4*x6 - 2*c3*d_2*m*x1*x4_2*x5 - 2*c4*d_2*m*x1*x3_2*x5 - 2*c2*d_2*m*x2_2*x3*x7 + 2*c2*d_2*m*x2_2*x4*x6 - 2*c3*d_2*m*x1_2*x4*x6 + 2*c3*d_2*m*x2_2*x3*x7 + 2*c4*d_2*m*x1_2*x3*x7 - 2*c4*d_2*m*x2_2*x4*x6 + 2*d_2*m*x1*x3*x4*x5_2 + 2*d_2*m*x1_2*x3*x5*x6 + 2*d_2*m*x1*x2_2*x6*x7 + 2*d_2*m*x1*x3_2*x6*x7 + 2*d_2*m*x1*x4_2*x6*x7 + 2*d_2*m*x2_2*x4*x5*x7 - 2*c3*d_2*m*x1*x2*x3*x6 + 2*c4*d_2*m*x1*x2*x3*x6 + 2*c3*d_2*m*x1*x2*x4*x7 - 2*c3*d_2*m*x2*x3*x4*x5 - 2*c4*d_2*m*x1*x2*x4*x7 + 2*c4*d_2*m*x2*x3*x4*x5 - 2*d_2*m*x1*x2*x3*x5*x7 - 2*d_2*m*x1*x2*x4*x5*x6)/(2.0f*div);
+        u4 = (d_2*m*x4_3*x6_2 - dwz*x1*x2_2 - dwz*x1*x3_2 - dwz*x1*x4_2 - d_2*m*x4_3*x5_2 - dwz*x1_3 + d_2*m*x4_3*x7_2 + 4*d_2*e4*m*x1_2 + 4*d_2*e4*m*x4_2 - 4*c44*d_2*e44*m*x1_2 - 4*c44*d_2*e44*m*x4_2 - 2*c4*d_2*m*x1_3*x7 + 4*c4*d_2*m*x1_2*xd4d + 4*c4*d_2*m*x4_2*xd4d - 2*d_2*m*x1_3*x5*x6 - d_2*m*x1_2*x4*x5_2 + d_2*m*x1_2*x4*x6_2 + d_2*m*x2_2*x4*x5_2 + d_2*m*x1_2*x4*x7_2 + d_2*m*x2_2*x4*x6_2 + d_2*m*x3_2*x4*x5_2 + d_2*m*x2_2*x4*x7_2 + d_2*m*x3_2*x4*x6_2 + d_2*m*x3_2*x4*x7_2 + 4*d_2*e2*m*x1*x3 - 4*d_2*e3*m*x1*x2 + 4*d_2*e2*m*x2*x4 + 4*d_2*e3*m*x3*x4 - 4*c22*d_2*e22*m*x1*x3 - 4*c22*d_2*e22*m*x2*x4 + 4*c33*d_2*e33*m*x1*x2 - 4*c33*d_2*e33*m*x3*x4 + 4*c2*d_2*m*x1*x3*xd2d - 4*c3*d_2*m*x1*x2*xd3d + 4*c2*d_2*m*x2*x4*xd2d + 4*c3*d_2*m*x3*x4*xd3d - 2*c2*d_2*m*x1_2*x3*x5 + 2*c3*d_2*m*x1_2*x2*x6 - 2*c2*d_2*m*x1*x3_2*x7 - 2*c3*d_2*m*x1*x2_2*x7 - 2*c4*d_2*m*x1_2*x2*x6 + 2*c4*d_2*m*x1_2*x3*x5 + 2*c2*d_2*m*x2*x4_2*x6 - 2*c3*d_2*m*x3*x4_2*x5 - 2*c4*d_2*m*x1*x4_2*x7 - 2*c4*d_2*m*x2*x4_2*x6 + 2*c4*d_2*m*x3*x4_2*x5 + 2*d_2*m*x1_2*x2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x6 + 2*d_2*m*x2*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x4*x5 + 2*c3*d_2*m*x1*x2*x4*x5 + 2*c2*d_2*m*x1*x3*x4*x6 - 2*c3*d_2*m*x1*x3*x4*x6 - 2*c2*d_2*m*x2*x3*x4*x7 + 2*c3*d_2*m*x2*x3*x4*x7)/div;
+        u3 = (d_2*m*x3_3*x5_2 - 2*dwy*x1*x2_2 - 2*dwy*x1*x3_2 - 2*dwy*x1*x4_2 - 2*dwy*x1_3 + d_2*m*x3_3*x6_2 + d_2*m*x3_3*x7_2 + 4*d_2*e3*m*x1_2 + 4*d_2*e3*m*x3_2 - 4*c33*d_2*e33*m*x1_2 - 4*c33*d_2*e33*m*x3_2 - 2*c3*d_2*m*x1_3*x6 + 4*c3*d_2*m*x1_2*xd3d + 4*c3*d_2*m*x3_2*xd3d - 2*d_2*m*x1_3*x5*x7 + d_2*m*x1_2*x3*x5_2 + d_2*m*x1_2*x3*x6_2 + d_2*m*x2_2*x3*x5_2 + d_2*m*x1_2*x3*x7_2 + d_2*m*x2_2*x3*x6_2 - d_2*m*x3*x4_2*x5_2 + d_2*m*x2_2*x3*x7_2 + d_2*m*x3*x4_2*x6_2 + d_2*m*x3*x4_2*x7_2 - 4*d_2*e2*m*x1*x4 + 4*d_2*e2*m*x2*x3 + 4*d_2*e4*m*x1*x2 + 4*d_2*e4*m*x3*x4 + 4*c22*d_2*e22*m*x1*x4 - 4*c22*d_2*e22*m*x2*x3 - 4*c44*d_2*e44*m*x1*x2 - 4*c44*d_2*e44*m*x3*x4 - 4*c2*d_2*m*x1*x4*xd2d + 4*c2*d_2*m*x2*x3*xd2d + 4*c4*d_2*m*x1*x2*xd4d + 4*c4*d_2*m*x3*x4*xd4d + 2*c2*d_2*m*x1_2*x4*x5 - 2*c2*d_2*m*x1*x4_2*x6 - 2*c3*d_2*m*x1*x3_2*x6 + 2*c3*d_2*m*x1_2*x2*x7 - 2*c3*d_2*m*x1_2*x4*x5 - 2*c4*d_2*m*x1*x2_2*x6 - 2*c2*d_2*m*x2*x3_2*x7 - 2*c4*d_2*m*x1_2*x2*x7 + 2*c3*d_2*m*x2*x3_2*x7 - 2*c3*d_2*m*x3_2*x4*x5 + 2*c4*d_2*m*x3_2*x4*x5 - 2*d_2*m*x1*x2*x4*x5_2 - 2*d_2*m*x1_2*x2*x5*x6 - 2*d_2*m*x1*x3_2*x5*x7 - 2*d_2*m*x1*x4_2*x5*x7 - 2*c2*d_2*m*x1*x2*x3*x5 + 2*c4*d_2*m*x1*x2*x3*x5 + 2*c2*d_2*m*x1*x3*x4*x7 + 2*c2*d_2*m*x2*x3*x4*x6 - 2*c4*d_2*m*x1*x3*x4*x7 - 2*c4*d_2*m*x2*x3*x4*x6 - 2*d_2*m*x1*x3*x4*x5*x6 + 2*d_2*m*x2*x3*x4*x5*x7)/(2.0f*div);
+        u2 = (d_2*m*x2_3*x5_2 - 2*dwx*x1*x2_2 - 2*dwx*x1*x3_2 - 2*dwx*x1*x4_2 - 2*dwx*x1_3 + d_2*m*x2_3*x6_2 + d_2*m*x2_3*x7_2 + 4*d_2*e2*m*x1_2 + 4*d_2*e2*m*x2_2 - 4*c22*d_2*e22*m*x1_2 - 4*c22*d_2*e22*m*x2_2 - 2*c2*d_2*m*x1_3*x5 + 4*c2*d_2*m*x1_2*xd2d + 4*c2*d_2*m*x2_2*xd2d + 2*d_2*m*x1_3*x6*x7 + d_2*m*x1_2*x2*x5_2 + d_2*m*x1_2*x2*x6_2 + d_2*m*x2*x3_2*x5_2 + d_2*m*x1_2*x2*x7_2 + d_2*m*x2*x3_2*x6_2 - d_2*m*x2*x4_2*x5_2 + d_2*m*x2*x3_2*x7_2 + d_2*m*x2*x4_2*x6_2 + d_2*m*x2*x4_2*x7_2 + 4*d_2*e3*m*x1*x4 + 4*d_2*e3*m*x2*x3 - 4*d_2*e4*m*x1*x3 + 4*d_2*e4*m*x2*x4 - 4*c33*d_2*e33*m*x1*x4 - 4*c33*d_2*e33*m*x2*x3 + 4*c44*d_2*e44*m*x1*x3 - 4*c44*d_2*e44*m*x2*x4 + 4*c3*d_2*m*x1*x4*xd3d + 4*c3*d_2*m*x2*x3*xd3d - 4*c4*d_2*m*x1*x3*xd4d + 4*c4*d_2*m*x2*x4*xd4d - 2*c2*d_2*m*x1*x2_2*x5 - 2*c2*d_2*m*x1_2*x3*x7 + 2*c2*d_2*m*x1_2*x4*x6 - 2*c3*d_2*m*x1*x4_2*x5 - 2*c4*d_2*m*x1*x3_2*x5 - 2*c2*d_2*m*x2_2*x3*x7 + 2*c2*d_2*m*x2_2*x4*x6 - 2*c3*d_2*m*x1_2*x4*x6 + 2*c3*d_2*m*x2_2*x3*x7 + 2*c4*d_2*m*x1_2*x3*x7 - 2*c4*d_2*m*x2_2*x4*x6 + 2*d_2*m*x1*x3*x4*x5_2 + 2*d_2*m*x1_2*x3*x5*x6 + 2*d_2*m*x1*x2_2*x6*x7 + 2*d_2*m*x1*x3_2*x6*x7 + 2*d_2*m*x1*x4_2*x6*x7 + 2*d_2*m*x2_2*x4*x5*x7 - 2*c3*d_2*m*x1*x2*x3*x6 + 2*c4*d_2*m*x1*x2*x3*x6 + 2*c3*d_2*m*x1*x2*x4*x7 - 2*c3*d_2*m*x2*x3*x4*x5 - 2*c4*d_2*m*x1*x2*x4*x7 + 2*c4*d_2*m*x2*x3*x4*x5 - 2*d_2*m*x1*x2*x3*x5*x7 - 2*d_2*m*x1*x2*x4*x5*x6)/(2.0f*div);
     }
 
     //Compute the forces
