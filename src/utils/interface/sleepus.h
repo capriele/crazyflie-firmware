@@ -1,13 +1,13 @@
-/*
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+/**
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
  *
  * Crazyflie control firmware
  *
- * Copyright (C) 2011-2012 Bitcraze AB
+ * Copyright (C) 2012 BitCraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,23 +21,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
- * system.h - Top level module header file
+ * sleepus.h: Micro second sleep
  */
+#ifndef __SLEEPNS_H__
+#define __SLEEPNS_H__
 
-#ifndef __SYSTEM_H__
-#define __SYSTEM_H__
+void sleepus(uint32_t ns);
 
-#include <stdint.h>
-
-void systemInit(void);
-bool systemTest(void);
-
-void systemLaunch(void);
-
-
-void systemStart();
-void systemWaitStart(void);
-void systemSetCanFly(bool val);
-bool systemCanFly(void);
-
-#endif //__SYSTEM_H__
+#endif // __SLEEPNS_H__

@@ -156,7 +156,7 @@ typedef enum mode_e {
   modeDisable = 0,
   modeAbs,
   modeVelocity
-} mode_t;
+} stab_mode_t;
 
 typedef struct setpoint_s {
   uint32_t timestamp;
@@ -171,12 +171,12 @@ typedef struct setpoint_s {
   acc_t acceleration;
 
   struct {
-    mode_t x;
-    mode_t y;
-    mode_t z;
-    mode_t roll;
-    mode_t pitch;
-    mode_t yaw;
+    stab_mode_t x;
+    stab_mode_t y;
+    stab_mode_t z;
+    stab_mode_t roll;
+    stab_mode_t pitch;
+    stab_mode_t yaw;
   } mode;
 } setpoint_t;
 
@@ -192,6 +192,21 @@ typedef struct setpointZ_s {
   float z;
   bool isUpdate; // True = small update of setpoint, false = completely new
 } setpointZ_t;
+
+/** Flow measurement**/
+typedef struct flowMeasurement_s {
+  uint32_t timestamp;
+  union {
+    struct {
+      float dpixelx;  // Accumulated pixel count x
+      float dpixely;  // Accumulated pixel count y
+    };
+    float dpixel[2];  // Accumulated pixel count
+  };
+  float stdDevX;      // Measurement standard deviation
+  float stdDevY;      // Measurement standard deviation
+  float dt;           // Time during which pixels were accumulated
+} flowMeasurement_t;
 
 /** TOF measurement**/
 typedef struct tofMeasurement_s {

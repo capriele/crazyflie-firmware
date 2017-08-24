@@ -52,7 +52,9 @@ typedef enum uwbEvent_e {
   eventReceiveFailed,
 } uwbEvent_t;
 
+#ifndef LOCODECK_NR_OF_ANCHORS
 #define LOCODECK_NR_OF_ANCHORS 6
+#endif
 
 typedef uint64_t locoAddress_t;
 
@@ -60,7 +62,7 @@ typedef struct {
   const uint64_t antennaDelay;
   const int rangingFailedThreshold;
 
-  const locoAddress_t tagAddress;
+  locoAddress_t tagAddress;
   const locoAddress_t anchorAddress[LOCODECK_NR_OF_ANCHORS];
 
   point_t anchorPosition[LOCODECK_NR_OF_ANCHORS];
@@ -70,6 +72,10 @@ typedef struct {
   float pressures[LOCODECK_NR_OF_ANCHORS];
   int failedRanging[LOCODECK_NR_OF_ANCHORS];
   volatile uint16_t rangingState;
+
+  // TWR-TDMA options
+  bool useTdma;
+  int tdmaSlot;
 } lpsAlgoOptions_t;
 
 point_t* locodeckGetAnchorPosition(uint8_t anchor);

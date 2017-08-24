@@ -170,10 +170,13 @@ void systemTask(void *arg)
   systemInit();
   commInit();
   commanderInit();
-  stabilizerInit();
+
+  StateEstimatorType estimator = anyEstimator;
 #ifdef PLATFORM_CF2
   deckInit();
-  #endif
+  estimator = deckGetRequiredEstimator();
+#endif
+  stabilizerInit(estimator);
   soundInit();
   memInit();
 
@@ -189,7 +192,7 @@ void systemTask(void *arg)
   pass &= stabilizerTest();
 #ifdef PLATFORM_CF2
   pass &= deckTest();
-  #endif
+#endif
   pass &= soundTest();
   pass &= memTest();
   pass &= watchdogNormalStartTest();
@@ -215,7 +218,7 @@ void systemTask(void *arg)
         // System can be forced to start by setting the param to 1 from the cfclient
         if (selftestPassed)
         {
-	        DEBUG_PRINT("Start forced.\n");
+          DEBUG_PRINT("Start forced.\n");
           systemStart();
           break;
         }

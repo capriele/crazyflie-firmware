@@ -174,6 +174,7 @@ PROJ_OBJ += commander.o crtp_commander.o crtp_commander_rpyt.o
 PROJ_OBJ += crtp_commander_generic.o crtp_localization_service.o
 PROJ_OBJ += attitude_pid_controller.o sensfusion6.o stabilizer.o
 PROJ_OBJ += position_estimator_altitude.o position_controller_pid.o
+PROJ_OBJ += estimator.o estimator_complementary.o
 PROJ_OBJ += estimator_$(ESTIMATOR).o controller_$(CONTROLLER).o
 PROJ_OBJ += power_distribution_$(POWER_DISTRIBUTION).o
 
@@ -202,6 +203,7 @@ PROJ_OBJ_CF2 += lpsTwrTdmaTag.o
 else
 PROJ_OBJ_CF2 += lpsTwrTag.o
 endif
+PROJ_OBJ_CF2 += flowdeck.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
 PROJ_OBJ_CF2 += lpsTdoaTag.o
@@ -217,7 +219,8 @@ PROJ_OBJ_CF2 += exptest.o
 PROJ_OBJ += filter.o cpuid.o cfassert.o  eprintf.o crc.o num.o debug.o
 PROJ_OBJ += version.o FreeRTOS-openocd.o
 PROJ_OBJ_CF1 += configblockflash.o
-PROJ_OBJ_CF2 += configblockeeprom.o
+PROJ_OBJ_CF2 += configblockeeprom.o crc_bosch.o
+PROJ_OBJ_CF2 += sleepus.o
 
 # Libs
 PROJ_OBJ_CF2 += libarm_math.a
@@ -289,7 +292,7 @@ ifeq ($(USE_ESKYLINK), 1)
   CFLAGS += -DUSE_ESKYLINK
 endif
 
-CFLAGS += -DBOARD_REV_$(REV) -DESTIMATOR_TYPE_$(ESTIMATOR) -DCONTROLLER_TYPE_$(CONTROLLER) -DPOWER_DISTRIBUTION_TYPE_$(POWER_DISTRIBUTION)
+CFLAGS += -DBOARD_REV_$(REV) -DESTIMATOR_NAME=$(ESTIMATOR)Estimator -DESTIMATOR_TYPE_$(ESTIMATOR) -DCONTROLLER_TYPE_$(CONTROLLER) -DPOWER_DISTRIBUTION_TYPE_$(POWER_DISTRIBUTION)
 
 CFLAGS += $(PROCESSOR) $(INCLUDES) $(STFLAGS)
 ifeq ($(PLATFORM), CF1)

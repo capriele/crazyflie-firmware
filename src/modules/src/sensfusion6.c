@@ -140,14 +140,16 @@ bool sensfusion6Test(void)
   return isInit;
 }
 
-void sensfusion6UpdateQ(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt)
+//void sensfusion6UpdateQ(float gx, float gy, float gz, float ax, float ay, float az, float mx, float my, float mz, float dt)
+void sensfusion6UpdateQ(float gx, float gy, float gz, float ax, float ay, float az, float dt)
 {
   //Cambio gli assi del magnetometro perchè rispetto a quelli del gyro/acc sono diversi:
   //In particolare:
   //Mx = (Gy = Ay)
   //My = (Gx = Ax)
   //-Mz = (Gz = Az)
-  sensfusion6UpdateQImpl(gx, gy, gz, ax, ay, az, mx, my, mz, dt);
+  //sensfusion6UpdateQImpl(gx, gy, gz, ax, ay, az, mx, my, mz, dt);
+  sensfusion6UpdateQImpl(gx, gy, gz, ax, ay, az, 0, 0, 0, dt);
   estimatedGravityDirection(&gravX, &gravY, &gravZ);
   if (!isCalibrated) {
     baseZacc = sensfusion6GetAccZ(ax, ay, az);
